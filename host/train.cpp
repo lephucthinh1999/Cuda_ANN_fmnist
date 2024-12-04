@@ -22,13 +22,13 @@ char input[N_IN];
 double expected[N_OUT];
 
 //percepton
-double w1[N_IN][N1], b1[N1];
+double **w1, b1[N1];
 double layer1[N1];
 int out_layer1[N1];
-double w2[N1][N2], b2[N2];
+double **w2, b2[N2];
 double layer2[N2];
 int  out_layer2[N2];
-double w3[N2][N_OUT], b3[N_OUT];
+double **w3, b3[N_OUT];
 double in_out[N_OUT];
 double output[N_OUT];
 
@@ -42,10 +42,8 @@ ifstream image;
 ifstream label;
 ofstream report;
 string MODEL= "model.dat";
-string training_label_fn= "../mnist/";
-string training_image_fn= "../mnist/";
-
-
+string training_label_fn= "../mnist/train-labels-idx3-ubyte";
+string training_image_fn= "../mnist/train-images-idx3-ubyte";
 
 
 void softmax(double *in_out, double *ouput, int n)
@@ -115,8 +113,8 @@ void back_propagration()
   
   for (int i=0;i<N2;i++){//delta 2
     delta2[i]=0;
-    for (int j=0;i<N_OUT;j++){
-      delta2[i]+=w3[j][i]*delta3[j];
+    for (int j=0;j<N_OUT;j++){
+      delta2[i]+=w3[i][j]*delta3[j];
     }
     delta2[i]*=out_layer2[i]/layer2[i];
   }
@@ -133,8 +131,8 @@ void back_propagration()
   
   for (int i=0;i<N1;i++){//delta 1
     delta1[i]=0;
-    for (int j=0;i<N_OUT;j++){
-      delta1[i]+=w2[j][i]*delta2[j];
+    for (int j=0;j<N2;j++){
+      delta1[i]+=w2[i][j]*delta2[j];
     }
     delta1[i]*=out_layer1[i]/layer1[i];
   }
@@ -248,12 +246,27 @@ int main(int argc, char *argv[])
     label.read(&number, sizeof(char));
   }
 
-  init((double **)w1,b1,N_IN,N1);
-  init((double **)w2,b2,N1,N2);
-  init((double **)w3,b3,N2,N_OUT);
+  w1=(double**)malloc(N_IN*sizeof(double*));
+  w2=(double**)malloc(N1*sizeof(double*));
+  w3=(double**)malloc(N2*sizeof(double*));
+
+  for (int i=0;i<N_IN;i++){
+    w1[i]=(double*)malloc(N1*sizeof(double));
+  }
+  for (int i=0;i<N1;i++){
+    w2[i]=(double*)malloc(N2*sizeof(double));
+  }
+  for(int i=0;i<N2;i++){
+    w3[i]=(double*)malloc(N_OUT*sizeof(double));
+  }
+  
+  init(w1,b1,N_IN,N1);
+  init(w2,b2,N1,N2);
+  init(w3,b3,N2,N_OUT);
 
   for (int i=0;i<EPOCHS;i++){
     for (int sample=1;sample<=NTRAINING;sample++){
+      printf("Sample: %d\n", sample);
       next_label();
       learning();
       printf("Square error: %0.6lf\n", square_error());
@@ -268,5 +281,18 @@ int main(int argc, char *argv[])
   cout<<"Time elapsed: "<<elapsed_time<<" seconds"<<"\n";
   image.close();
   label.close();
+
+  for (int i=0;i<N_IN;i++){
+    free(w1[i]);
+  }
+  for (int i=0;i<N1;i++){
+    free(w2[i]);
+  }
+  for(int i=0;i<N2;i++){
+    free(w3[i]);
+  }
+  free(w1);
+  free(w2);
+  free(w3);
   return 0;
 }
