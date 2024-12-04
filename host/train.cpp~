@@ -1,0 +1,266 @@
+#include <iostream>
+#include <fstream>
+#include <math.h>
+#include <stdio.h>
+#include <time.h>
+#include <stdlib.h>
+using namespace std;
+
+#define N1 128
+#define N2 128
+#define N_OUT 10
+#define LEARNING_RATE 1e-3
+#define EPOCHS 5
+#define EPSILON 1e-3
+#define HEIGHT 28
+#define WIDTH 28
+#define N_IN 784 //N_IN=HEIGH*WIDTH
+#define NTRAINING 60000
+
+#define MODEL "model.dat"
+
+char input[N_IN];
+double expected[N_OUT];
+
+//percepton
+double w1[N_IN][N1], b1[N1];
+double layer1[N1];
+int out_layer1[N1];
+double w2[N1][N2], b2[N2];
+double layer2[N2];
+int  out_layer2[N2];
+double w3[N2][N_OUT], b3[N_OUT];
+double in_out[N_OUT];
+double output[N_OUT];
+
+//back propagation
+double delta3[N_OUT];
+double delta2[N2];
+double delta1[N1];
+
+//I/O
+ifstream image;
+ifstream label;
+ofstream report;
+
+void softmax(double *in_out, double *ouput, int n)
+{
+  double d=0;
+  for (int i=0;i<n;i++){
+    output[i]=exp(in_out[i]);
+    d+=output[i];
+  }
+  for (int i=0;i<n;i++){
+    output[i]/=d;
+  }
+}
+
+void ReLU(double *layer, int *out_layer, int n)
+{
+  for (int i=0;i<n;i++){
+    out_layer[i]=(layer[i]>0)?layer[i]:0;
+  }
+}
+
+void perceptron()
+{
+  for (int i=0;i<N1;i++){ //layer 1
+    layer1[i]=b1[i];
+    for (int j=0;j<N_IN;j++){
+      layer1[i]+=w1[j][i]*input[j]
+    }
+  }
+  
+  ReLU(layer1,out_layer1,N1); //out of layer 1
+  
+  for (int i=0;i<N2;i++){ //layer 2
+    layer2[i]=b2[i];
+    for (int j=0;j<N1;j++){
+      layer2[i]+=w2[j][i]*out_layer1[j];
+    }
+  }
+
+  ReLU(layer2,out_layer2,N2); //out of layer 2
+
+  for (int i=0;i<N_OUT;i++){ //indirecr of output
+    in_out[i]=b3[i];
+    for (int j=0;j<N2;j++){
+      in_out[i]+=w3[j][i]*out_layer2[j];
+    }
+  }
+
+  softmax(in_out,output,N_OUT);
+}
+
+void back_propagration()
+{
+  for (int i=0;i<N_OUT;i++){//delta 3
+    delta3[i]=output[i]-expected[i];
+  }
+  
+  for (int i=0;i<N2;i++){//update w3
+    for (int j=0;j<N_OUT;j++){
+      w3[i][j]-=LEARNING_RATE*delta3[j]*out_layer2[i];
+    }
+  }
+
+  for (int i=0;i<N_OUT;i++){//update b3
+    b3[i]-=LEARNING_RATE*delta3[i]
+  }
+  
+  for (int i=0;i<N2;i++){//delta 2
+    delta2[i]=0;
+    for (int j=0;i<N_OUT;j++){
+      delta2[i]+=w3[j][i]*delta3[j];
+    }
+    delta2[i]*=out_layer2[i]/layer2[i];
+  }
+
+  for (int i=0;i<N1;i++){//update w2
+    for (int j=0;j<N2;j++){
+      w2[i][j]-=LEARNING_RATE*delta2[j]*out_layer1[i];
+    }
+  }
+
+  for (int i=0;i<N2;i++){//update b2
+    b2-=LEARNING_RATE*delta2[i];
+  }
+  
+  for (int i=0;i<N1;i++){//delta 1
+    delta1[i]=0;
+    for (int j=0;i<N_OUT;j++){
+      delta1[i]+=w2[j][i]*delta2[j];
+    }
+    delta1[i]*=out_layer1[i]/layer1[i];
+  }
+
+  for (int i=0;i<N_IN;i++){//update w1
+    for (int j=0;j<N1;j++){
+      w1[i][j]-=LEARNING_RATE*delta1[j]*input[i];
+    }
+  }
+
+  for (int i=0;i<N1;i++){//update b1
+    b1[i]-=LEARNING_RATE*delta1[i];
+  }
+}
+
+double square_error()
+{
+  double sq_err=0;
+  for (int i=0;i<N_OUT;i++){
+    sq_err+=(output[i]-expected[i])*(output[i]-expected[i]);
+  }
+  return sq_err*0.5;
+}
+
+int learning()
+{
+  for (int i=0;i<EPOCHS;i++){
+    percepton();
+    back_propagration();
+    if (square_error()<EPSILON)
+      return i;
+  }
+  return EPOCHS;
+}
+
+void init(double weight,double bias,int r,int c) //length of bias = c
+{
+  for (int i=0;i<r;i++){
+    for (int j=0;j<c;j++){
+      int sign=rand()%2; //+-
+      weight[i][j]=(rand()%6)/10.0;
+      if (sign)
+	weight[i][j]=-weight[i][j];
+    }
+  }
+
+  for (int i=0;i<c;i++){
+    int sign=rand()%2;
+    bias[i]=(rand()%10+1)/(10.0+c);
+    if (sign)
+      bias[i]=-bias[i]
+  }
+}
+
+void next_label()
+{
+  for (int i=0;i<HEIGHT;i++){
+    for (int j=0;j<WIDTH;j++){
+      image.read(&number, sizeof(char));
+      input[i*WIDTH+j]=(number!=0);
+    }
+  }
+  
+  label.read(&number, sizeof(char));
+  for (int i = 0; i < n3; ++i) {
+    expected[i] = 0.0;
+  }
+  expected[number] = 1.0;
+
+}
+
+void write_matrix(ofstream file, double weight, double bias, int r, int c)
+{
+  for (int i=0;i<r;i++){
+    for (int j=0;j<c;j++){
+      file << weight[i][j] << " ";
+    }
+    file<<endl;
+  }
+  
+  for (int i=0;i<c;i++){
+    file<<bias[i]<<" ";
+  }
+  file<<endl;
+}
+
+void write_model(string filename)
+{
+  ofstream file(filename.c_str(),ios::out);
+  write_matrix(file,w1,b1,N_IN,N1);
+  write_matrix(file,w2,b2,N1,N2);
+  write_matrix(file,w3,b3,N2,N_OUT);
+  file.close();
+}
+
+int main(int argc, char *argv[])
+{
+  image.open(training_image_fn.c_str(), ios::in | ios::binary); // Binary image file
+  label.open(training_label_fn.c_str(), ios::in | ios::binary ); // Binary label file
+
+  //Time begins
+  clock_t begin = clock();
+  // Reading file headers
+  char number;
+  for (int i = 0; i < 16; i++) {
+    image.read(&number, sizeof(char));
+  }
+  
+  for (int i = 0; i < 8; i++) {
+    label.read(&number, sizeof(char));
+  }
+
+  init(w1,b1,N_IN,N1);
+  init(w2,b2,N1,N2);
+  init(w3,b3,N2,N_OUT);
+
+  for (int i=0;i<EPOCHS;i++){
+    for (int sample=1;sample<=NTRAINING;sample++){
+      next_label();
+      learning();
+      printf("Square error: %0.6lf\n", square_error());
+      if (sample%100==0){
+	write_model(MODEL);
+      }
+    }
+  }
+  
+  clock_t end = clock();
+  double elapsed_time = double(end-begin)/CLOCKS_PER_SEC;
+  cout<<"Time elapsed: "<<elapsed_time<<" seconds"<<"\n";
+  image.close();
+  label.close();
+  return 0;
+}
