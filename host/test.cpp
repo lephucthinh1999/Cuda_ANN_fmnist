@@ -55,6 +55,7 @@ void softmax(double *in_out, double *ouput, int n)
   }
   for (int i=0;i<n;i++){
     output[i]/=d;
+    output[i]+=1e-5;
   }
 }
 void ReLU(double *layer, double *out_layer, int n)

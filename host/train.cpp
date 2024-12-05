@@ -10,12 +10,12 @@ using namespace std;
 #define N2 128
 #define N_OUT 10
 #define LEARNING_RATE 1e-3
-#define EPOCHS 1
+#define EPOCHS 3
 #define EPSILON 1e-3
 #define HEIGHT 28
 #define WIDTH 28
 #define N_IN 784 //N_IN=HEIGH*WIDTH
-#define NTRAINING 600
+#define NTRAINING 60000
 
 
 char input[N_IN];
@@ -55,6 +55,7 @@ void softmax(double *in_out, double *ouput, int n)
   }
   for (int i=0;i<n;i++){
     output[i]/=d;
+    output[i]+=1e-5;
   }
 }
 
@@ -152,10 +153,7 @@ double cross_entropy()
 {
   double cr_entr=0;
   for (int i=0;i<N_OUT;i++){
-    if (fabs(expected[i]-1.0)<1e-2) { //check expected[i]==1 because of initially definition
-      cr_entr+=expected[i]*log(output[i]);
-      break;
-    }
+    cr_entr+=expected[i]*log(output[i]);
   }
   return -cr_entr;
 }
