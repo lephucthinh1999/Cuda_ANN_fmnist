@@ -18,7 +18,7 @@ using namespace std;
 #define N_IN 784 //N_IN=HEIGH*WIDTH
 #define NTESTING 10000
 
-char input[N_IN];
+double input[N_IN];
 double expected[N_OUT];
 
 //percepton
@@ -43,7 +43,7 @@ ifstream label;
 ofstream report;
 string MODEL= "model.dat";
 string testing_label_fn="../mnist/t10k-labels-idx1-ubyte";
-string testing_image_fn="../mnist/t10k-images-idx1-ubyte";
+string testing_image_fn="../mnist/t10k-images-idx3-ubyte";
 
 
 void softmax(double *in_out, double *ouput, int n)
@@ -140,7 +140,12 @@ void load_matrix(ifstream &file,double **weight,double *bias,int r, int c)
 
 void load_model(string file_name) {
   ifstream file(file_name.c_str(), ios::in);
-	
+
+  if (file.fail()) {
+    cout<<"Cannot open model!\n";
+    exit(EXIT_FAILURE);
+  }
+  
   load_matrix(file,w1,b1,N1,N_IN);
   load_matrix(file,w2,b2,N2,N1);
   load_matrix(file,w3,b3,N_OUT,N2);
@@ -149,13 +154,13 @@ void load_model(string file_name) {
 }
 
 
-int next_label()
+int next_sample()
 {
   char number;
   for (int i=0;i<HEIGHT;i++){
     for (int j=0;j<WIDTH;j++){
       image.read(&number, sizeof(char));
-      input[i*WIDTH+j]=(number!=0);
+      input[i*WIDTH+j]=number/255.0;
     }
   }
   
@@ -172,6 +177,10 @@ int main()
   image.open(testing_image_fn.c_str(), ios::in | ios::binary); // Binary image file
   label.open(testing_label_fn.c_str(), ios::in | ios::binary ); // Binary label file
 
+  if (image.fail() || label.fail()) {
+    cout<< "Cannot open a file!\n";
+    return 1;
+  }
   // Reading file headers
   char number;
   for (int i = 0; i < 16; ++i) {
@@ -201,7 +210,7 @@ int main()
 
   int correct=0;
   for (int sample=1;sample<=NTESTING;sample++){
-    int label=next_label();
+    int label=next_sample();
     perceptron();
     int predict=0;
     for (int i=1;i<N_OUT;i++){

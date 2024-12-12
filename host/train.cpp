@@ -10,7 +10,7 @@ using namespace std;
 #define N2 128
 #define N_OUT 10
 #define LEARNING_RATE 1e-3
-#define EPOCHS 3
+#define EPOCHS 5
 #define EPSILON 1e-3
 #define HEIGHT 28
 #define WIDTH 28
@@ -18,7 +18,7 @@ using namespace std;
 #define NTRAINING 60000
 
 
-char input[N_IN];
+double input[N_IN];
 double expected[N_OUT];
 
 //percepton
@@ -40,9 +40,8 @@ double delta1[N1];
 //I/O
 ifstream image;
 ifstream label;
-ofstream report;
 string MODEL= "model.dat";
-string training_label_fn= "../mnist/train-labels-idx3-ubyte";
+string training_label_fn= "../mnist/train-labels-idx1-ubyte";
 string training_image_fn= "../mnist/train-images-idx3-ubyte";
 
 
@@ -86,7 +85,7 @@ void perceptron()
 
   ReLU(layer2,out_layer2,N2); //out of layer 2
 
-  for (int i=0;i<N_OUT;i++){ //indirecr of output
+  for (int i=0;i<N_OUT;i++){ //indirect of output
     in_out[i]=b3[i];
     for (int j=0;j<N2;j++){
       in_out[i]+=w3[i][j]*out_layer2[j];
@@ -114,10 +113,10 @@ void back_propagration()
   
   for (int i=0;i<N2;i++){//delta 2
     delta2[i]=0;
-    for (int j=0;j<N_OUT;j++){
-      delta2[i]+=w3[j][i]*delta3[j];
-    }
-    delta2[i]*=(layer2[i]>0);
+    if (layer2[i]>0)
+      for (int j=0;j<N_OUT;j++){
+	delta2[i]+=w3[j][i]*delta3[j];
+      }
   }
 
   for (int i=0;i<N2;i++){//update w2
@@ -132,10 +131,10 @@ void back_propagration()
   
   for (int i=0;i<N1;i++){//delta 1
     delta1[i]=0;
-    for (int j=0;j<N2;j++){
-      delta1[i]+=w2[j][i]*delta2[j];
-    }
-    delta1[i]*=(layer1[i]>0)?1:0;
+    if (layer1[i]>0)
+      for (int j=0;j<N2;j++){
+	delta1[i]+=w2[j][i]*delta2[j];
+      }
   }
 
   for (int i=0;i<N1;i++){//update w1
@@ -158,23 +157,12 @@ double cross_entropy()
   return -cr_entr;
 }
 
-int learning()
-{
-  for (int i=0;i<EPOCHS;i++){
-    perceptron();
-    back_propagration();
-    if (cross_entropy()<EPSILON)
-      return i;
-  }
-  return EPOCHS;
-}
-
 void init(double **weight,double *bias,int r,int c) //length of bias is r
 {
   for (int i=0;i<r;i++){
     for (int j=0;j<c;j++){
       int sign=rand()%2; //+-
-      weight[i][j]=(rand()%6)/10.0;
+      weight[i][j]=(double) (rand()%10+1)/(10*c);
       if (sign)
 	weight[i][j]=-weight[i][j];
     }
@@ -182,22 +170,23 @@ void init(double **weight,double *bias,int r,int c) //length of bias is r
 
   for (int i=0;i<r;i++){
     int sign=rand()%2;
-    bias[i]=(rand()%10+1)/(10.0+c);
+    bias[i]=(double)(rand()%10+1)/(10*c);
     if (sign)
       bias[i]=-bias[i];
   }
 }
 
-void next_label()
+void next_sample()
 {
   char number;
+
   for (int i=0;i<HEIGHT;i++){
     for (int j=0;j<WIDTH;j++){
       image.read(&number, sizeof(char));
-      input[i*WIDTH+j]=(number!=0);
+      input[i*WIDTH+j]=number/255.0;
     }
   }
-  
+
   label.read(&number, sizeof(char));
   for (int i = 0; i < N_OUT; ++i) {
     expected[i] = 0.0;
@@ -230,11 +219,31 @@ void write_model(string filename)
   file.close();
 }
 
+int max_index(double *output, int n)
+{
+  double max_val=output[0];
+  int max_indx=0;
+
+  for (int i=1;i<n;i++){
+    if (max_val<output[i]) {
+      max_val=output[i];
+      max_indx=i;
+    }
+  }
+
+  return max_indx;
+}
+
 int main(int argc, char *argv[])
 {
   image.open(training_image_fn.c_str(), ios::in | ios::binary); // Binary image file
   label.open(training_label_fn.c_str(), ios::in | ios::binary ); // Binary label file
 
+  if (image.fail() || label.fail()) {
+    cout << "Cannot open a file!\n";
+    return 1;
+  }
+  
   //Time begins
   clock_t begin = clock();
   // Reading file headers
@@ -266,15 +275,19 @@ int main(int argc, char *argv[])
   init(w3,b3,N_OUT,N2);
 
   for (int i=0;i<EPOCHS;i++){
+    int predict=0;
     for (int sample=1;sample<=NTRAINING;sample++){
-      printf("Sample: %d\n", sample);
-      next_label();
-      learning();
-      printf("Cross entropy: %0.6lf\n", cross_entropy());
-      if (sample%100==0){
-	write_model(MODEL);
+      next_sample();
+      perceptron();
+      if (max_index(output,N_OUT)==max_index(expected,N_OUT)){
+        predict++;
       }
+      back_propagration();
     }
+    
+    printf("Epoch %d\n",i+1);
+    printf("Accuracy: %0.2lf\n",predict*100.0/NTRAINING);
+    printf("Cross entropy: %0.6lf\n\n", cross_entropy());
   }
   
   clock_t end = clock();
