@@ -95,7 +95,7 @@ void perceptron()
   softmax(in_out,output,N_OUT);
 }
 
-void back_propagration()
+void back_propagation()
 {
   for (int i=0;i<N_OUT;i++){//delta 3
     delta3[i]=output[i]-expected[i];
@@ -234,6 +234,18 @@ int max_index(double *output, int n)
   return max_indx;
 }
 
+int learning()
+{
+  for (int i = 0; i<EPOCHS; ++i) {
+    perceptron();
+    back_propagation();
+    if (cross_entropy() < EPSILON) {
+      return i;
+    }
+  }
+  return EPOCHS;
+}
+
 int main(int argc, char *argv[])
 {
   image.open(training_image_fn.c_str(), ios::in | ios::binary); // Binary image file
@@ -275,18 +287,12 @@ int main(int argc, char *argv[])
   init(w3,b3,N_OUT,N2);
 
   for (int i=0;i<EPOCHS;i++){
-    int predict=0;
     for (int sample=1;sample<=NTRAINING;sample++){
       next_sample();
-      perceptron();
-      if (max_index(output,N_OUT)==max_index(expected,N_OUT)){
-        predict++;
-      }
-      back_propagration();
+      learning();
     }
     
     printf("Epoch %d\n",i+1);
-    printf("Accuracy: %0.2lf\n",predict*100.0/NTRAINING);
     printf("Cross entropy: %0.6lf\n\n", cross_entropy());
   }
   
