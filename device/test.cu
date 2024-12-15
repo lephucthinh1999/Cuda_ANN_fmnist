@@ -11,7 +11,6 @@
 #define N2 128
 #define N_OUT 10
 #define LEARNING_RATE 1e-3
-#define EPOCHS 3
 #define EPSILON 1e-3
 #define NTESTING 10000
 
@@ -92,7 +91,7 @@ void readHeader(FILE *file, int headerSize) {
 
 // Hàm đọc dữ liệu từ file ảnh và file nhãn
 int readInput(FILE *imageFile , FILE *labelFile, 
-               char *input, double *expected) {
+               double *input, double *expected) {
     char buffer;
 
     // Đọc dữ liệu ảnh
@@ -104,7 +103,7 @@ int readInput(FILE *imageFile , FILE *labelFile,
                 fclose(labelFile);
                 exit(EXIT_FAILURE);
             }
-            input[i * WIDTH + j] = (buffer !=0);
+            input[i * WIDTH + j] = (double) buffer/ 255.0;
         }
     }
 
@@ -214,7 +213,7 @@ void load_model(const char *file_name, double *w1, double *w2, double *w3, doubl
 }
 
 void test (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3, double *h_b3,
-             char *h_input, double *h_expected, FILE *imageFile, FILE *labelFile){
+             double *h_input, double *h_expected, FILE *imageFile, FILE *labelFile){
 
 
     size_t shared_memory_size = 256 * sizeof(double);
@@ -336,7 +335,7 @@ int main(int argc, char ** argv)
     readHeader(labelFile, 8);  // Header lable (8 bytes)
 
     // Allocate and initialize weights and biases on host
-    char *h_input = new char[N_IN];
+    double *h_input = new double[N_IN];
     double *h_expected = new double[N_OUT];
 
     double *h_w1 = (double *)malloc(N1 * N_IN * sizeof(double));

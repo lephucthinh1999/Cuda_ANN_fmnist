@@ -92,7 +92,7 @@ void readHeader(FILE *file, int headerSize) {
 
 // Hàm đọc dữ liệu từ file ảnh và file nhãn
 void readInput(FILE *imageFile , FILE *labelFile, 
-               char *input, double *expected) {
+               double *input, double *expected) {
     char buffer;
 
     // Đọc dữ liệu ảnh
@@ -104,7 +104,7 @@ void readInput(FILE *imageFile , FILE *labelFile,
                 fclose(labelFile);
                 exit(EXIT_FAILURE);
             }
-            input[i * WIDTH + j] = (buffer!=0);
+            input[i * WIDTH + j] = (double) buffer / 255.0;
         }
     }
 
@@ -304,7 +304,7 @@ void write_model(double *h_w1, double *h_b1, double *h_w2, double *h_b2, double 
 }
 
 void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3, double *h_b3,
-             char *h_input, double *h_expected, FILE *imageFile, FILE *labelFile){
+             double *h_input, double *h_expected, FILE *imageFile, FILE *labelFile){
 
 
     size_t shared_memory_size = 256 * sizeof(double);
@@ -434,23 +434,23 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
             }
         }
 
-        // Copy weights and biases back to host after every epoch
-        CHECK(cudaMemcpy(h_w1, d_w1, N1 * N_IN * sizeof(double), cudaMemcpyDeviceToHost));
-        CHECK(cudaMemcpy(h_b1, d_b1, N1 * sizeof(double), cudaMemcpyDeviceToHost));
-        CHECK(cudaMemcpy(h_w2, d_w2, N2 * N1 * sizeof(double), cudaMemcpyDeviceToHost));
-        CHECK(cudaMemcpy(h_b2, d_b2, N2 * sizeof(double), cudaMemcpyDeviceToHost));
-        CHECK(cudaMemcpy(h_w3, d_w3, N_OUT * N2 * sizeof(double), cudaMemcpyDeviceToHost));
-        CHECK(cudaMemcpy(h_b3, d_b3, N_OUT * sizeof(double), cudaMemcpyDeviceToHost));
-
-        // Lưu mô hình sau mỗi epoch
-        write_model(h_w1, h_b1, h_w2, h_b2, h_w3, h_b3);
-
         rewind(imageFile);
         rewind(labelFile);
     }
 
     timer.Stop();
     printf("Time: %.3f ms\n", timer.Elapsed());
+
+    // Copy weights and biases back to host after every epoch
+    CHECK(cudaMemcpy(h_w1, d_w1, N1 * N_IN * sizeof(double), cudaMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(h_b1, d_b1, N1 * sizeof(double), cudaMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(h_w2, d_w2, N2 * N1 * sizeof(double), cudaMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(h_b2, d_b2, N2 * sizeof(double), cudaMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(h_w3, d_w3, N_OUT * N2 * sizeof(double), cudaMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(h_b3, d_b3, N_OUT * sizeof(double), cudaMemcpyDeviceToHost));
+
+    // Lưu mô hình
+    write_model(h_w1, h_b1, h_w2, h_b2, h_w3, h_b3);
 
     // Free allocated memory on both device and host
     CHECK(cudaFree(d_input));
@@ -477,7 +477,7 @@ int main(int argc, char ** argv)
     FILE *labelFile = openFile(training_label_fn, "rb");
 
     // Allocate and initialize weights and biases on host
-    char *h_input = new char[N_IN];
+    double *h_input = new double[N_IN];
     double *h_expected = new double[N_OUT];
 
     double *h_w1 = (double *)malloc(N1 * N_IN * sizeof(double));
