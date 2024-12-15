@@ -1,0 +1,49 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\phanv\\OneDrive\\Documents\\GitHub\\Cuda_ANN_fmnist\\device\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{8B6FCD00-862D-47E2-8516-06A215CD801A}|train.cu\\train.cu.vcxproj|C:\\Users\\phanv\\OneDrive\\Documents\\GitHub\\Cuda_ANN_fmnist\\device\\train.cu\\train.cu||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{8B6FCD00-862D-47E2-8516-06A215CD801A}|train.cu\\train.cu.vcxproj|solutionrelative:train.cu\\train.cu||{8B382828-6202-11D1-8870-0000F87579D2}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 3,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{13b12e3e-c1b4-4539-9371-4fe9a0d523fc}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:129:0:{13b12e3e-c1b4-4539-9371-4fe9a0d523fc}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{d78612c7-9962-4b83-95d9-268046dad23a}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "train.cu",
+              "DocumentMoniker": "C:\\Users\\phanv\\OneDrive\\Documents\\GitHub\\Cuda_ANN_fmnist\\device\\train.cu\\train.cu",
+              "RelativeDocumentMoniker": "train.cu\\train.cu",
+              "ToolTip": "C:\\Users\\phanv\\OneDrive\\Documents\\GitHub\\Cuda_ANN_fmnist\\device\\train.cu\\train.cu",
+              "RelativeToolTip": "train.cu\\train.cu",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2024-12-07T10:17:32.506Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

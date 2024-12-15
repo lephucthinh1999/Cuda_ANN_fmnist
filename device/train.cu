@@ -104,7 +104,7 @@ void readInput(FILE *imageFile , FILE *labelFile,
                 fclose(labelFile);
                 exit(EXIT_FAILURE);
             }
-            input[i * WIDTH + j] = (buffer != 0); // Chuyển pixel thành nhị phân (0 hoặc 1)
+            input[i * WIDTH + j] = (buffer!=0);
         }
     }
 
@@ -131,35 +131,33 @@ void readInput(FILE *imageFile , FILE *labelFile,
     expected[(unsigned char)buffer] = 1.0;
 }
 
+
 // CUDA kernel for softmax
 __global__ void softmax(double *in_out, double *output, int n) {
-    extern __shared__ double shared_mem[]; // Dùng bộ nhớ chia sẻ
+    extern __shared__ double shared_mem[]; 
     
-    int tid = threadIdx.x;
-    int global_id = blockIdx.x * blockDim.x + threadIdx.x;
+    int tid = threadIdx.x;                      
+    int global_id = blockIdx.x * blockDim.x + tid; 
 
-    // Khởi tạo tổng d = 0
-    if (tid < n) {
-        shared_mem[tid] = (global_id < n) ? exp(in_out[global_id]) : 0.0;
+    if (global_id < n) {
+        shared_mem[tid] = exp(in_out[global_id]);
+    } else {
+        shared_mem[tid] = 0.0;
     }
     __syncthreads();
 
-    // Tính tổng d trong bộ nhớ chia sẻ
+   
     for (int stride = 1; stride < blockDim.x; stride *= 2) {
-        int index = 2 * stride * tid;
-        if (index + stride < blockDim.x && index < n) {
-            shared_mem[index] += shared_mem[index + stride];
+        if (tid % (2 * stride) == 0 && tid + stride < blockDim.x) {
+            shared_mem[tid] += shared_mem[tid + stride];
         }
         __syncthreads();
     }
 
-    // Tính giá trị cuối cùng của tổng (shared_mem[0] chứa tổng d)
-    double d = shared_mem[0];
-    __syncthreads();
+    double block_sum = shared_mem[0];
 
-    // Chia giá trị đầu vào cho tổng d và cộng thêm 1e-5
     if (global_id < n) {
-        output[global_id] = shared_mem[tid] / d + 1e-5;
+        output[global_id] = exp(in_out[global_id]) / block_sum + 1e-5;
     }
 }
 
@@ -196,7 +194,7 @@ __global__ void compute_delta(double *delta_next, double *w_next, double *delta,
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < cols) {
         double sum = 0.0;
-        for (int i = 0; i < rows; ++i) {
+        for (int i = 0; i < rows; i++) {
             sum += w_next[i * cols + idx] * delta_next[i];
         }
         delta[idx] = sum * (layer[idx] > 0 ? 1 : 0);
@@ -215,44 +213,45 @@ __device__ double atomicAddDouble(double* address, double val) {
 }
 
 // CUDA kernel for backward propagation (weights and biases update)
-__global__ void backward_propagation(double *delta, double *w, double *b, double *input, int rows, int cols) {
+__global__ void backward_propagation_W(double *delta, double *w, double *input, int rows, int cols) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < cols) {
         for (int i = 0; i < rows; ++i) {
             atomicAddDouble(&w[i * cols + idx], -LEARNING_RATE * delta[i] * input[idx]);
         }
     }
-    if (idx < rows) {
+}
+
+__global__ void backward_propagation_B(double *delta, double *b, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if(idx < n){
         atomicAddDouble(&b[idx], -LEARNING_RATE * delta[idx]);
     }
 }
 
 __global__ void cross_entropy_kernel(double* expected, double* output, double* loss, int n) {
-    extern __shared__ double shared_data[];
-    int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    int local_idx = threadIdx.x;
+    extern __shared__ double shared_loss[]; 
 
-    // Initialize shared memory to zero
-    shared_data[local_idx] = 0.0;
+    int tid = threadIdx.x;  
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;  
 
-    if (idx < n && output[idx] > 0) {
-        // Compute cross-entropy partial sum
-        shared_data[local_idx] = expected[idx] * log(output[idx]);
+    if (idx < n) {
+        shared_loss[tid] = expected[idx] * log(output[idx]);
+    } else {
+        shared_loss[tid] = 0.0;
     }
-
     __syncthreads();
 
-    // Perform reduction in shared memory
+    // Reduction to calculate block sum
     for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
-        if (local_idx < stride) {
-            shared_data[local_idx] += shared_data[local_idx + stride];
+        if (tid < stride) {
+            shared_loss[tid] += shared_loss[tid + stride];
         }
         __syncthreads();
     }
 
-    // Use atomicAdd to accumulate the result into the global loss
-    if (local_idx == 0) {
-        atomicAddDouble(loss, shared_data[0]);
+    if (tid == 0) {
+        atomicAddDouble(loss, -1 * shared_loss[0]);
     }
 }
 
@@ -390,7 +389,11 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            backward_propagation<<<(N_OUT + 255) / 256, 256>>>(d_delta3, d_w3, d_b3, d_output2, N_OUT, N2);
+            backward_propagation_W<<<(N2 + 255) / 256, 256>>>(d_delta3, d_w3, d_output2, N_OUT, N2);
+            CHECK(cudaGetLastError());
+		    CHECK(cudaDeviceSynchronize());
+
+            backward_propagation_B<<<(N_OUT + 255) / 256, 256>>>(d_delta3, d_b3, N_OUT);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
@@ -398,7 +401,11 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            backward_propagation<<<(N2 + 255) / 256, 256>>>(d_delta2, d_w2, d_b2, d_output1,N2, N1);
+            backward_propagation_W<<<(N1 + 255) / 256, 256>>>(d_delta2, d_w2, d_output1, N2, N1);
+            CHECK(cudaGetLastError());
+		    CHECK(cudaDeviceSynchronize());
+
+            backward_propagation_B<<<(N2 + 255) / 256, 256>>>(d_delta2, d_b2, N2);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
@@ -406,7 +413,11 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            backward_propagation<<<(N1 + 255) / 256, 256>>>(d_delta1, d_w1, d_b1, d_input, N1, N_IN);
+            backward_propagation_W<<<(N_IN + 255) / 256, 256>>>(d_delta1, d_w1, d_input, N1, N_IN);
+            CHECK(cudaGetLastError());
+		    CHECK(cudaDeviceSynchronize());
+
+            backward_propagation_B<<<(N1 + 255) / 256, 256>>>(d_delta1, d_b1, N1);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
@@ -415,12 +426,12 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-          double h_loss;
-          CHECK(cudaMemcpy(&h_loss, d_loss, sizeof(double), cudaMemcpyDeviceToHost));
-          printf("Loss: %f\n", h_loss);
-          if (h_loss < EPSILON)
-            break;
-
+            double h_loss;
+            CHECK(cudaMemcpy(&h_loss, d_loss, sizeof(double), cudaMemcpyDeviceToHost));
+            printf("Loss: %f\n", h_loss);  
+            if (h_loss < EPSILON){
+                break;
+            }
         }
 
         // Copy weights and biases back to host after every epoch
