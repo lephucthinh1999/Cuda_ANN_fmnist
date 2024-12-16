@@ -219,21 +219,6 @@ void write_model(string filename)
   file.close();
 }
 
-int max_index(double *output, int n)
-{
-  double max_val=output[0];
-  int max_indx=0;
-
-  for (int i=1;i<n;i++){
-    if (max_val<output[i]) {
-      max_val=output[i];
-      max_indx=i;
-    }
-  }
-
-  return max_indx;
-}
-
 int learning()
 {
   for (int i = 0; i<EPOCHS; ++i) {
@@ -286,19 +271,17 @@ int main(int argc, char *argv[])
   init(w2,b2,N2,N1);
   init(w3,b3,N_OUT,N2);
 
-  for (int i=0;i<EPOCHS;i++){
-    for (int sample=1;sample<=NTRAINING;sample++){
-      next_sample();
-      learning();
-    }
-    
-    printf("Epoch %d\n",i+1);
-    printf("Cross entropy: %0.6lf\n\n", cross_entropy());
+  for (int sample=1;sample<=NTRAINING;sample++){
+    next_sample();
+    learning();        
+    printf("Sample %d, ",sample);
+    printf("Cross entropy: %0.6lf\n", cross_entropy());
   }
-  
+
   clock_t end = clock();
   double elapsed_time = double(end-begin)/CLOCKS_PER_SEC;
   cout<<"Time elapsed: "<<elapsed_time<<" seconds"<<"\n";
+  write_model("model.dat");
   image.close();
   label.close();
 
