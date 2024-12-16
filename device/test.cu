@@ -231,7 +231,6 @@ void test (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3,
     // Allocate inputs, outputs, and deltas here
     double *d_input, *d_output1, *d_output2, *d_output;
     double *d_delta1, *d_delta2, *d_delta3, *d_expected;
-    double *d_loss;
     CHECK(cudaMalloc(&d_input, N_IN * sizeof(double)));
     CHECK(cudaMalloc(&d_output1, N1 * sizeof(double)));
     CHECK(cudaMalloc(&d_output2, N2 * sizeof(double)));
@@ -280,7 +279,7 @@ void test (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3,
         int predict=0;
         double h_out1;
         double h_out2;
-        for (int i = 1;i < N_OUT; i++){
+        for (int i = 1;i <= N_OUT; i++){
             CHECK(cudaMemcpy(&h_out1, &d_output[i], sizeof(double), cudaMemcpyDeviceToHost));
             CHECK(cudaMemcpy(&h_out2, &d_output[predict], sizeof(double), cudaMemcpyDeviceToHost));
             if (h_out1 > h_out2){
