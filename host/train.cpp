@@ -231,15 +231,6 @@ int main(int argc, char *argv[])
   
   //Time begins
   clock_t begin = clock();
-  // Reading file headers
-  char number;
-  for (int i = 0; i < 16; i++) {
-    image.read(&number, sizeof(char));
-  }
-  
-  for (int i = 0; i < 8; i++) {
-    label.read(&number, sizeof(char));
-  }
 
   w1=(double**)malloc(N1*sizeof(double*));
   w2=(double**)malloc(N2*sizeof(double*));
