@@ -116,19 +116,12 @@ void readInput(FILE *imageFile , FILE *labelFile,
         exit(EXIT_FAILURE);
     }
 
-    // Kiểm tra giá trị nhãn hợp lệ
-    if ((unsigned char)buffer >= N_OUT) {
-        printf("Invalid label value: %d\n", (unsigned char)buffer);
-        fclose(imageFile);
-        fclose(labelFile);
-        exit(EXIT_FAILURE);
-    }
 
     // Khởi tạo giá trị cho vector `expected`
     for (int i = 0; i < N_OUT; i++) {
         expected[i] = 0.0;
     }
-    expected[(unsigned char)buffer] = 1.0;
+    expected[buffer] = 1.0;
 }
 
 
@@ -194,10 +187,12 @@ __global__ void compute_delta(double *delta_next, double *w_next, double *delta,
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < cols) {
         double sum = 0.0;
-        for (int i = 0; i < rows; i++) {
-            sum += w_next[i * cols + idx] * delta_next[i];
+        if (layer[idx] >0){
+            for (int i = 0; i < rows; i++) {
+                sum += w_next[i * cols + idx] * delta_next[i];
+            }
         }
-        delta[idx] = sum * (layer[idx] > 0 ? 1 : 0);
+        delta[idx] = sum;
     }
 }
 
@@ -260,16 +255,16 @@ void init(double *weight, double *bias, int rows, int cols) {
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
             int sign = rand() % 2; // +-1
-            weight[i * cols + j] = (rand() % 6) / (10.0* cols);
-            if (sign)
+            weight[i * cols + j] = (double)(rand() % 10 + 1) / (10.0* cols);
+            if (sign == 1)
                 weight[i * cols + j] = -weight[i * cols + j];
         }
     }
 
     for (int i = 0; i < rows; ++i) {
         int sign = rand() % 2;
-        bias[i] = (rand() % 10 + 1) / (10.0* cols);
-        if (sign)
+        bias[i] = (double)(rand() % 10 + 1) / (10.0* cols);
+        if (sign == 1)
             bias[i] = -bias[i];
     }
 }
@@ -344,18 +339,20 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
     GpuTimer timer; 
     timer.Start();
 
-    for (int sample = 0; sample < NTRAINING; sample++) {
-        printf("Sample %d ",sample + 1);
+    for (int epoch = 0 ; epoch < EPOCHS; epoch++){
+        printf("Epoch %d, ",epoch + 1);
+        // Read header
+        readHeader(imageFile, 16); // Header image (16 bytes)
+        readHeader(labelFile, 8);  // Header lable (8 bytes)
+        for (int sample = 0; sample < NTRAINING; sample++) {
+            printf("Sample %d, ",sample + 1);
 
-        // Read data
-        readInput(imageFile, labelFile, h_input, h_expected);
-        //Copy data to device
-        CHECK(cudaMemcpy(d_input, h_input, N_IN * sizeof(double), cudaMemcpyHostToDevice));
-        CHECK(cudaMemcpy(d_expected, h_expected, N_OUT * sizeof(double), cudaMemcpyHostToDevice));
+            // Read data
+            readInput(imageFile, labelFile, h_input, h_expected);
+            //Copy data to device
+            CHECK(cudaMemcpy(d_input, h_input, N_IN * sizeof(double), cudaMemcpyHostToDevice));
+            CHECK(cudaMemcpy(d_expected, h_expected, N_OUT * sizeof(double), cudaMemcpyHostToDevice));
 
-        double h_loss;
-
-        for (int epoch = 0 ; epoch < EPOCHS; epoch++){
             // Forward pass
             forward_propagation<<<(N1 + 255) / 256, 256>>>(d_input, d_w1, d_b1, d_output1, N1, N_IN);
             CHECK(cudaGetLastError());
@@ -425,12 +422,15 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
 		    CHECK(cudaDeviceSynchronize());
 
             
-            CHECK(cudaMemcpy(&h_loss, d_loss, sizeof(double), cudaMemcpyDeviceToHost));  
+            double h_loss;
+            CHECK(cudaMemcpy(&h_loss, d_loss, sizeof(double), cudaMemcpyDeviceToHost)); 
+            printf("Cross entropy: %0.6lf\n", h_loss); 
             if (h_loss < EPSILON){
                 break;
             }
         }
-        printf("Cross entropy: %0.6lf\n", h_loss);
+    rewind(labelFile);
+    rewind(imageFile);
     }
 
     timer.Stop();
@@ -470,10 +470,6 @@ int main(int argc, char ** argv)
     //Open image file, label file
     FILE *imageFile = openFile(training_image_fn, "rb");
     FILE *labelFile = openFile(training_label_fn, "rb");
-
-    // Read header
-    readHeader(imageFile, 16); // Header image (16 bytes)
-    readHeader(labelFile, 8);  // Header lable (8 bytes)
 
     // Allocate and initialize weights and biases on host
     double *h_input = new double[N_IN];

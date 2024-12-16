@@ -115,19 +115,11 @@ int readInput(FILE *imageFile , FILE *labelFile,
         exit(EXIT_FAILURE);
     }
 
-    // Kiểm tra giá trị nhãn hợp lệ
-    if ((unsigned char)buffer >= N_OUT) {
-        printf("Invalid label value: %d\n", (unsigned char)buffer);
-        fclose(imageFile);
-        fclose(labelFile);
-        exit(EXIT_FAILURE);
-    }
-
     // Khởi tạo giá trị cho vector `expected`
     for (int i = 0; i < N_OUT; i++) {
         expected[i] = 0.0;
     }
-    expected[(unsigned char)buffer] = 1.0;
+    expected[buffer] = 1.0;
     return (int) buffer;
 }
 

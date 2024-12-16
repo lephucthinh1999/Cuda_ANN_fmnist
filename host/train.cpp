@@ -10,7 +10,7 @@ using namespace std;
 #define N2 128
 #define N_OUT 10
 #define LEARNING_RATE 1e-3
-#define EPOCHS 4
+#define EPOCHS 5
 #define EPSILON 1e-3
 #define HEIGHT 28
 #define WIDTH 28
@@ -41,8 +41,8 @@ double delta1[N1];
 ifstream image;
 ifstream label;
 string MODEL= "model.dat";
-string training_label_fn= "../mnist/train-labels-idx1-ubyte";
-string training_image_fn= "../mnist/train-images-idx3-ubyte";
+string training_label_fn= "mnist/train-labels-idx1-ubyte";
+string training_image_fn= "mnist/train-images-idx3-ubyte";
 
 
 void softmax(double *in_out, double *ouput, int n)
@@ -219,18 +219,6 @@ void write_model(string filename)
   file.close();
 }
 
-int learning()
-{
-  for (int i = 0; i<EPOCHS; ++i) {
-    perceptron();
-    back_propagation();
-    if (cross_entropy() < EPSILON) {
-      return i;
-    }
-  }
-  return EPOCHS;
-}
-
 int main(int argc, char *argv[])
 {
   image.open(training_image_fn.c_str(), ios::in | ios::binary); // Binary image file
@@ -272,16 +260,27 @@ int main(int argc, char *argv[])
   init(w3,b3,N_OUT,N2);
 
   for (int i=0;i<EPOCHS;i++){
+    // Reading file headers
+    char number;
+    for (int i = 0; i < 16; i++) {
+      image.read(&number, sizeof(char));
+    }
+    
+    for (int i = 0; i < 8; i++) {
+      label.read(&number, sizeof(char));
+    }
     for (int sample=1;sample<=NTRAINING;sample++){
       next_sample();
-      //    learning();
       perceptron();
       back_propagation();
+      if (cross_entropy() <EPSILON){
+        break;
+      }
       printf("Sample %d, ",sample);
       printf("Cross entropy: %0.6lf\n", cross_entropy());
     }
-    image.seekg(16,std::ios::beg);
-    label.seekg(8,std::ios::beg);
+    rewind(label);
+    rewind(image);
   }
 
   clock_t end = clock();

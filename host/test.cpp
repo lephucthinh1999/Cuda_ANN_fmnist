@@ -11,7 +11,6 @@ using namespace std;
 #define N2 128
 #define N_OUT 10
 #define LEARNING_RATE 1e-3
-#define EPOCHS 5
 #define EPSILON 1e-3
 #define HEIGHT 28
 #define WIDTH 28
@@ -42,8 +41,8 @@ ifstream image;
 ifstream label;
 ofstream report;
 string MODEL= "model.dat";
-string testing_label_fn="../mnist/t10k-labels-idx1-ubyte";
-string testing_image_fn="../mnist/t10k-images-idx3-ubyte";
+string testing_label_fn="mnist/t10k-labels-idx1-ubyte";
+string testing_image_fn="mnist/t10k-images-idx3-ubyte";
 
 
 void softmax(double *in_out, double *ouput, int n)
@@ -64,36 +63,6 @@ void ReLU(double *layer, double *out_layer, int n)
     out_layer[i]=(layer[i]>0)?layer[i]:0;
   }
 }
-
-/*void perceptron()
-{
-  for (int i=0;i<N1;i++){ //layer 1
-    layer1[i]=b1[i];
-    for (int j=0;j<N_IN;j++){
-      layer1[i]+=w1[j][i]*input[j];
-    }
-  }
-  
-  ReLU(layer1,out_layer1,N1); //out of layer 1
-  
-  for (int i=0;i<N2;i++){ //layer 2
-    layer2[i]=b2[i];
-    for (int j=0;j<N1;j++){
-      layer2[i]+=w2[j][i]*out_layer1[j];
-    }
-  }
-
-  ReLU(layer2,out_layer2,N2); //out of layer 2
-
-  for (int i=0;i<N_OUT;i++){ //indirecr of output
-    in_out[i]=b3[i];
-    for (int j=0;j<N2;j++){
-      in_out[i]+=w3[j][i]*out_layer2[j];
-    }
-  }
-
-  softmax(in_out,output,N_OUT);
-  }*/
 
 void perceptron()
 {
