@@ -11,7 +11,7 @@
 #define N2 128
 #define N_OUT 10
 #define LEARNING_RATE 1e-3
-#define EPOCHS 3
+#define EPOCHS 5
 #define EPSILON 1e-3
 #define NTRAINING 60000
 
@@ -345,7 +345,7 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
     timer.Start();
 
     for (int sample = 0; sample < NTRAINING; sample++) {
-        printf("Sample %d\n ",sample + 1);
+        printf("Sample %d ",sample + 1);
 
         // Read data
         readInput(imageFile, labelFile, h_input, h_expected);
@@ -353,8 +353,9 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
         CHECK(cudaMemcpy(d_input, h_input, N_IN * sizeof(double), cudaMemcpyHostToDevice));
         CHECK(cudaMemcpy(d_expected, h_expected, N_OUT * sizeof(double), cudaMemcpyHostToDevice));
 
+        double h_loss;
+
         for (int epoch = 0 ; epoch < EPOCHS; epoch++){
-            printf("Epoch %d ",epoch + 1);
             // Forward pass
             forward_propagation<<<(N1 + 255) / 256, 256>>>(d_input, d_w1, d_b1, d_output1, N1, N_IN);
             CHECK(cudaGetLastError());
@@ -423,13 +424,13 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            double h_loss;
-            CHECK(cudaMemcpy(&h_loss, d_loss, sizeof(double), cudaMemcpyDeviceToHost));
-            printf("Loss: %f\n", h_loss);  
+            
+            CHECK(cudaMemcpy(&h_loss, d_loss, sizeof(double), cudaMemcpyDeviceToHost));  
             if (h_loss < EPSILON){
                 break;
             }
         }
+        printf("Cross entropy: %0.6lf\n", h_loss);
     }
 
     timer.Stop();
