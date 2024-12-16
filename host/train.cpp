@@ -270,10 +270,12 @@ int main(int argc, char *argv[])
   init(w1,b1,N1,N_IN);
   init(w2,b2,N2,N1);
   init(w3,b3,N_OUT,N2);
-
+  for (int i=0;i<EPOCHS;i++)
   for (int sample=1;sample<=NTRAINING;sample++){
     next_sample();
-    learning();        
+    //    learning();
+    perceptron();
+    back_propagation();
     printf("Sample %d, ",sample);
     printf("Cross entropy: %0.6lf\n", cross_entropy());
   }
