@@ -215,7 +215,7 @@ int main()
     int predict=0;
     for (int i=1;i<N_OUT;i++){
       if (output[i]>output[predict]){
-	predict=i;
+	      predict=i;
       }
       predict--;
       if (label==predict){

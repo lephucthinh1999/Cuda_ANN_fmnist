@@ -260,7 +260,7 @@ void init(double *weight, double *bias, int rows, int cols) {
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
             int sign = rand() % 2; // +-1
-            weight[i * cols + j] = (rand() % 6) / 10.0;
+            weight[i * cols + j] = (rand() % 6) / (10.0* cols);
             if (sign)
                 weight[i * cols + j] = -weight[i * cols + j];
         }
@@ -268,7 +268,7 @@ void init(double *weight, double *bias, int rows, int cols) {
 
     for (int i = 0; i < rows; ++i) {
         int sign = rand() % 2;
-        bias[i] = (rand() % 10 + 1) / (10.0 + cols);
+        bias[i] = (rand() % 10 + 1) / (10.0* cols);
         if (sign)
             bias[i] = -bias[i];
     }
