@@ -344,20 +344,17 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
     GpuTimer timer; 
     timer.Start();
 
-    for (int epoch = 0; epoch < EPOCHS; ++epoch) {
-      printf("Epoch %d\n",epoch + 1);
-        // Read header
-        readHeader(imageFile, 16); // Header image (16 bytes)
-        readHeader(labelFile, 8);  // Header lable (8 bytes)
+    for (int sample = 0; sample < NTRAINING; sample++) {
+        printf("Sample %d\n ",sample + 1);
 
-        for (int i = 0; i < NTRAINING; ++i) {
-            printf("Sample %d ",i + 1);
-            // Read data
-            readInput(imageFile, labelFile, h_input, h_expected);
-            //Copy data to device
-            CHECK(cudaMemcpy(d_input, h_input, N_IN * sizeof(double), cudaMemcpyHostToDevice));
-            CHECK(cudaMemcpy(d_expected, h_expected, N_OUT * sizeof(double), cudaMemcpyHostToDevice));
+        // Read data
+        readInput(imageFile, labelFile, h_input, h_expected);
+        //Copy data to device
+        CHECK(cudaMemcpy(d_input, h_input, N_IN * sizeof(double), cudaMemcpyHostToDevice));
+        CHECK(cudaMemcpy(d_expected, h_expected, N_OUT * sizeof(double), cudaMemcpyHostToDevice));
 
+        for (int epoch = 0 ; epoch < EPOCHS; epoch++){
+            printf("Epoch %d ",epoch + 1);
             // Forward pass
             forward_propagation<<<(N1 + 255) / 256, 256>>>(d_input, d_w1, d_b1, d_output1, N1, N_IN);
             CHECK(cudaGetLastError());
@@ -433,9 +430,6 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
                 break;
             }
         }
-
-        rewind(imageFile);
-        rewind(labelFile);
     }
 
     timer.Stop();
@@ -475,6 +469,10 @@ int main(int argc, char ** argv)
     //Open image file, label file
     FILE *imageFile = openFile(training_image_fn, "rb");
     FILE *labelFile = openFile(training_label_fn, "rb");
+
+    // Read header
+    readHeader(imageFile, 16); // Header image (16 bytes)
+    readHeader(labelFile, 8);  // Header lable (8 bytes)
 
     // Allocate and initialize weights and biases on host
     double *h_input = new double[N_IN];

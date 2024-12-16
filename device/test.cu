@@ -103,7 +103,7 @@ int readInput(FILE *imageFile , FILE *labelFile,
                 fclose(labelFile);
                 exit(EXIT_FAILURE);
             }
-            input[i * WIDTH + j] = (double) buffer/ 255.0;
+            input[i * WIDTH + j] = (double) buffer / 255.0;
         }
     }
 
