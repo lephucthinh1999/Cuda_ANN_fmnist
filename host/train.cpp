@@ -10,7 +10,7 @@ using namespace std;
 #define N2 128
 #define N_OUT 10
 #define LEARNING_RATE 1e-3
-#define EPOCHS 5
+#define EPOCHS 4
 #define EPSILON 1e-3
 #define HEIGHT 28
 #define WIDTH 28
@@ -270,14 +270,18 @@ int main(int argc, char *argv[])
   init(w1,b1,N1,N_IN);
   init(w2,b2,N2,N1);
   init(w3,b3,N_OUT,N2);
-  for (int i=0;i<EPOCHS;i++)
-  for (int sample=1;sample<=NTRAINING;sample++){
-    next_sample();
-    //    learning();
-    perceptron();
-    back_propagation();
-    printf("Sample %d, ",sample);
-    printf("Cross entropy: %0.6lf\n", cross_entropy());
+
+  for (int i=0;i<EPOCHS;i++){
+    for (int sample=1;sample<=NTRAINING;sample++){
+      next_sample();
+      //    learning();
+      perceptron();
+      back_propagation();
+      printf("Sample %d, ",sample);
+      printf("Cross entropy: %0.6lf\n", cross_entropy());
+    }
+    image.seekg(16,std::ios::beg);
+    label.seekg(8,std::ios::beg);
   }
 
   clock_t end = clock();
