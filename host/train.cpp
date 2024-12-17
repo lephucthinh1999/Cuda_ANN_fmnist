@@ -204,7 +204,7 @@ void write_matrix(ofstream &file, double **weight, double *bias, int r, int c)
     file<<endl;
   }
   
-  for (int i=0;i<c;i++){
+  for (int i=0;i<r;i++){
     file<<bias[i]<<" ";
   }
   file<<endl;
@@ -222,7 +222,7 @@ void write_model(string filename)
 int main(int argc, char *argv[])
 {
   image.open(training_image_fn.c_str(), ios::in | ios::binary); // Binary image file
-  label.open(training_label_fn.c_str(), ios::in | ios::binary ); // Binary label file
+  label.open(training_label_fn.c_str(), ios::in | ios::binary); // Binary label file
 
   if (image.fail() || label.fail()) {
     cout << "Cannot open a file!\n";
