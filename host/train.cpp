@@ -10,7 +10,7 @@ using namespace std;
 #define N2 128
 #define N_OUT 10
 #define LEARNING_RATE 1e-3
-#define EPOCHS 5
+#define EPOCHS 3
 #define EPSILON 1e-3
 #define HEIGHT 28
 #define WIDTH 28
@@ -231,6 +231,15 @@ int main(int argc, char *argv[])
   
   //Time begins
   clock_t begin = clock();
+  // Reading file headers
+  char number;
+  for (int i = 0; i < 16; i++) {
+    image.read(&number, sizeof(char));
+  }
+  
+  for (int i = 0; i < 8; i++) {
+    label.read(&number, sizeof(char));
+  }
 
   w1=(double**)malloc(N1*sizeof(double*));
   w2=(double**)malloc(N2*sizeof(double*));
@@ -251,27 +260,15 @@ int main(int argc, char *argv[])
   init(w3,b3,N_OUT,N2);
 
   for (int i=0;i<EPOCHS;i++){
-    // Reading file headers
-    char number;
-    for (int i = 0; i < 16; i++) {
-      image.read(&number, sizeof(char));
-    }
-    
-    for (int i = 0; i < 8; i++) {
-      label.read(&number, sizeof(char));
-    }
     for (int sample=1;sample<=NTRAINING;sample++){
       next_sample();
       perceptron();
       back_propagation();
-      if (cross_entropy() <EPSILON){
-        break;
-      }
       printf("Sample %d, ",sample);
       printf("Cross entropy: %0.6lf\n", cross_entropy());
     }
-    rewind(label);
-    rewind(image);
+    image.seekg(16,std::ios::beg);
+    label.seekg(8,std::ios::beg);
   }
 
   clock_t end = clock();

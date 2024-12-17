@@ -182,7 +182,7 @@ int main()
     int label=next_sample();
     perceptron();
     int predict=0;
-    for (int i=1;i<= N_OUT;i++){
+    for (int i=1;i< N_OUT;i++){
       if (output[i]>output[predict]){
 	      predict=i;
       }

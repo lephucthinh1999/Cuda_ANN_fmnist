@@ -208,7 +208,7 @@ void test (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3,
              double *h_input, double *h_expected, FILE *imageFile, FILE *labelFile){
 
 
-    size_t shared_memory_size = 256 * sizeof(double);
+    size_t shared_memory_size = 1024 * sizeof(double);
 
     // Allocate device memory
     double *d_w1, *d_b1, *d_w2, *d_b2, *d_w3, *d_b3;
@@ -229,17 +229,19 @@ void test (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3,
 
     // Implement training loop (forward + backward propagation)
     // Allocate inputs, outputs, and deltas here
-    double *d_input, *d_output1, *d_output2, *d_output;
-    double *d_delta1, *d_delta2, *d_delta3, *d_expected;
+    double *d_input,*d_layer1, *d_out_layer1, *d_layer2, *d_out_layer2, *d_layer3, *d_output, *d_expected;
+    double *d_delta1, *d_delta2, *d_delta3;
     CHECK(cudaMalloc(&d_input, N_IN * sizeof(double)));
-    CHECK(cudaMalloc(&d_output1, N1 * sizeof(double)));
-    CHECK(cudaMalloc(&d_output2, N2 * sizeof(double)));
+    CHECK(cudaMalloc(&d_layer1, N1 * sizeof(double)));
+    CHECK(cudaMalloc(&d_out_layer1, N1 * sizeof(double)));
+    CHECK(cudaMalloc(&d_layer2, N2 * sizeof(double)));
+    CHECK(cudaMalloc(&d_out_layer2, N2 * sizeof(double)));
+    CHECK(cudaMalloc(&d_layer3, N_OUT * sizeof(double)));
     CHECK(cudaMalloc(&d_output, N_OUT * sizeof(double)));
     CHECK(cudaMalloc(&d_delta1, N1 * sizeof(double)));
     CHECK(cudaMalloc(&d_delta2, N2 * sizeof(double)));
     CHECK(cudaMalloc(&d_delta3, N_OUT * sizeof(double)));
     CHECK(cudaMalloc(&d_expected, N_OUT * sizeof(double)));
-    CHECK(cudaMalloc(&d_loss, sizeof(double)));
 
     GpuTimer timer; 
     timer.Start();
@@ -252,34 +254,34 @@ void test (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3,
         CHECK(cudaMemcpy(d_expected, h_expected, N_OUT * sizeof(double), cudaMemcpyHostToDevice));
 
         // Forward pass
-        forward_propagation<<<(N1 + 255) / 256, 256>>>(d_input, d_w1, d_b1, d_output1, N1, N_IN);
+        forward_propagation<<<(N1 + 1023) / 1024, 1024>>>(d_input, d_w1, d_b1, d_layer1, N1, N_IN);
         CHECK(cudaGetLastError());
-	    CHECK(cudaDeviceSynchronize());
+		CHECK(cudaDeviceSynchronize());
 
-        ReLU<<<(N1 + 255) / 256, 256>>>(d_output1, d_output1, N1);
+        ReLU<<<(N1 + 1023) / 1024, 1024>>>(d_layer1, d_out_layer1, N1);
         CHECK(cudaGetLastError());
-        CHECK(cudaDeviceSynchronize());
+		CHECK(cudaDeviceSynchronize());
 
-        forward_propagation<<<(N2 + 255) / 256, 256>>>(d_output1, d_w2, d_b2, d_output2, N2, N1);
+        forward_propagation<<<(N2 + 1023) / 1024, 1024>>>(d_out_layer1, d_w2, d_b2, d_layer2, N2, N1);
         CHECK(cudaGetLastError());
-        CHECK(cudaDeviceSynchronize());
+		CHECK(cudaDeviceSynchronize());
 
-        ReLU<<<(N2 + 255) / 256, 256>>>(d_output2, d_output2, N2);
+        ReLU<<<(N2 + 1023) / 1024, 1024>>>(d_layer2, d_out_layer2, N2);
         CHECK(cudaGetLastError());
-        CHECK(cudaDeviceSynchronize());
+		CHECK(cudaDeviceSynchronize());
 
-        forward_propagation<<<(N_OUT + 255) / 256, 256>>>(d_output2, d_w3, d_b3, d_output, N_OUT, N2);
+        forward_propagation<<<(N_OUT + 1023) / 1024, 1024>>>(d_out_layer2, d_w3, d_b3, d_layer3, N_OUT, N2);
         CHECK(cudaGetLastError());
-        CHECK(cudaDeviceSynchronize());
+		CHECK(cudaDeviceSynchronize());
 
-        softmax<<<(N_OUT + 255) / 256, 256, shared_memory_size>>>(d_output, d_output, N_OUT);
+        softmax<<<(N_OUT + 1023) / 1024, 1024, shared_memory_size>>>(d_layer3, d_output, N_OUT);
         CHECK(cudaGetLastError());
-        CHECK(cudaDeviceSynchronize());
+		CHECK(cudaDeviceSynchronize());
 
         int predict=0;
         double h_out1;
         double h_out2;
-        for (int i = 1;i <= N_OUT; i++){
+        for (int i = 1;i < N_OUT; i++){
             CHECK(cudaMemcpy(&h_out1, &d_output[i], sizeof(double), cudaMemcpyDeviceToHost));
             CHECK(cudaMemcpy(&h_out2, &d_output[predict], sizeof(double), cudaMemcpyDeviceToHost));
             if (h_out1 > h_out2){
@@ -299,8 +301,11 @@ void test (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3,
 
     // Free allocated memory on both device and host
     CHECK(cudaFree(d_input));
-    CHECK(cudaFree(d_output1));
-    CHECK(cudaFree(d_output2));
+    CHECK(cudaFree(d_layer1));
+    CHECK(cudaFree(d_out_layer1));
+    CHECK(cudaFree(d_layer2));
+    CHECK(cudaFree(d_out_layer2));
+    CHECK(cudaFree(d_layer3));
     CHECK(cudaFree(d_output));
     CHECK(cudaFree(d_delta1));
     CHECK(cudaFree(d_delta2));
