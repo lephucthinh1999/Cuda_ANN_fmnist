@@ -12,12 +12,11 @@
 #define N_OUT 10
 #define LEARNING_RATE 1e-3
 #define EPOCHS 3
-#define EPSILON 1e-3
 #define NTRAINING 60000
 
 const char *training_label_fn= "mnist/train-labels-idx1-ubyte";
 const char *training_image_fn= "mnist/train-images-idx3-ubyte";
-const char *model_fn= "model.dat";
+const char *model_fn= "model_device.dat";
 
 #define CHECK(call)\
 {\
@@ -68,7 +67,7 @@ struct GpuTimer
 	}
 };
 
-// Hàm mở file
+// Open file
 FILE* openFile(const char *fileName, const char *mode) {
     FILE *file = fopen(fileName, mode);
     if (file == NULL) {
@@ -78,7 +77,7 @@ FILE* openFile(const char *fileName, const char *mode) {
     return file;
 }
 
-// Hàm đọc header của file
+// Read file headers
 void readHeader(FILE *file, int headerSize) {
     char buffer;
     for (int i = 0; i < headerSize; i++) {
@@ -90,12 +89,12 @@ void readHeader(FILE *file, int headerSize) {
     }
 }
 
-// Hàm đọc dữ liệu từ file ảnh và file nhãn
+// Read image, label
 void readInput(FILE *imageFile , FILE *labelFile, 
                double *input, double *expected) {
     char buffer;
 
-    // Đọc dữ liệu ảnh
+    // Image
     for (int i = 0; i < HEIGHT; i++) {
         for (int j = 0; j < WIDTH; j++) {
             if (fread(&buffer, sizeof(char), 1, imageFile) != 1) {
@@ -108,7 +107,7 @@ void readInput(FILE *imageFile , FILE *labelFile,
         }
     }
 
-    // Đọc nhãn và chuyển đổi thành one-hot vector
+    // Label
     if (fread(&buffer, sizeof(char), 1, labelFile) != 1) {
         printf("Error reading label data\n");
         fclose(imageFile);
@@ -116,8 +115,6 @@ void readInput(FILE *imageFile , FILE *labelFile,
         exit(EXIT_FAILURE);
     }
 
-
-    // Khởi tạo giá trị cho vector `expected`
     for (int i = 0; i < N_OUT; i++) {
         expected[i] = 0.0;
     }
@@ -125,7 +122,7 @@ void readInput(FILE *imageFile , FILE *labelFile,
 }
 
 
-// CUDA kernel for softmax
+//Kernel for softmax
 __global__ void softmax(double *in_out, double *output, int n) {
     extern __shared__ double shared_mem[]; 
     
@@ -139,13 +136,13 @@ __global__ void softmax(double *in_out, double *output, int n) {
     }
     __syncthreads();
 
-   
-    for (int stride = 1; stride < blockDim.x; stride *= 2) {
-        if (tid % (2 * stride) == 0 && tid + stride < blockDim.x) {
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (tid < stride) {
             shared_mem[tid] += shared_mem[tid + stride];
         }
         __syncthreads();
     }
+
 
     double block_sum = shared_mem[0];
 
@@ -154,7 +151,7 @@ __global__ void softmax(double *in_out, double *output, int n) {
     }
 }
 
-// CUDA kernel for ReLU
+// Kernel for ReLU
 __global__ void ReLU(double *layer, double *out_layer, int n) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
@@ -162,7 +159,7 @@ __global__ void ReLU(double *layer, double *out_layer, int n) {
     }
 }
 
-// CUDA kernel for forward propagation
+// Kernel for forward propagation
 __global__ void forward_propagation(double *input, double *w, double *b, double *output, int rows, int cols) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < rows) {
@@ -174,7 +171,7 @@ __global__ void forward_propagation(double *input, double *w, double *b, double 
     }
 }
 
-// CUDA kernel for delta3 calculation
+// Kernel for delta3 calculation
 __global__ void compute_delta3(double *output, double *expected, double *delta3, int n) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
@@ -182,12 +179,12 @@ __global__ void compute_delta3(double *output, double *expected, double *delta3,
     }
 }
 
-// CUDA kernel for delta2 and delta1 calculation
-__global__ void compute_delta(double *delta_next, double *w_next, double *delta, double *output, int rows, int cols) {
+// Kernel for delta2 and delta1 calculation
+__global__ void compute_delta(double *delta_next, double *w_next, double *delta, double *layer, int rows, int cols) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < cols) {
         double sum = 0.0;
-        if (output[idx] >0){
+        if (layer[idx] >0){
             for (int i = 0; i < rows; i++) {
                 sum += w_next[i * cols + idx] * delta_next[i];
             }
@@ -207,7 +204,7 @@ __device__ double atomicAddDouble(double* address, double val) {
     return __longlong_as_double(old);
 }
 
-// CUDA kernel for backward propagation (weights and biases update)
+// Kernel for backward propagation (weights and biases update)
 __global__ void backward_propagation_W(double *delta, double *w, double *input, int rows, int cols) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < cols) {
@@ -237,7 +234,6 @@ __global__ void cross_entropy_kernel(double* expected, double* output, double* l
     }
     __syncthreads();
 
-    // Reduction to calculate block sum
     for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
         if (tid < stride) {
             shared_loss[tid] += shared_loss[tid + stride];
@@ -275,14 +271,14 @@ void write_matrix(FILE* file, double *weight, double *bias, int rows, int cols) 
     {
         for (int j = 0; j < cols; ++j)
         {
-            fprintf(file, "%lf ", weight[i * cols + j]);
+            fprintf(file, "%0.9lf ", weight[i * cols + j]);
         }
         fprintf(file, "\n");
     }
 
     for (int i = 0; i < rows; ++i)
     {
-        fprintf(file, "%lf ", bias[i]);
+        fprintf(file, "%0.9lf", bias[i]);
     }
     fprintf(file, "\n");
 }
@@ -301,8 +297,8 @@ void write_model(double *h_w1, double *h_b1, double *h_w2, double *h_b2, double 
 void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3, double *h_b3,
              double *h_input, double *h_expected, FILE *imageFile, FILE *labelFile){
 
-
-    size_t shared_memory_size = 1024 * sizeof(double);
+    int blockSize = 256;
+    size_t shared_memory_size = 256 * sizeof(double);
 
     // Allocate device memory
     double *d_w1, *d_b1, *d_w2, *d_b2, *d_w3, *d_b3;
@@ -322,16 +318,13 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
     CHECK(cudaMemcpy(d_b3, h_b3, N_OUT * sizeof(double), cudaMemcpyHostToDevice));
 
     // Implement training loop (forward + backward propagation)
-    // Allocate inputs, outputs, and deltas here
-    double *d_input,*d_layer1, *d_out_layer1, *d_layer2, *d_out_layer2, *d_layer3, *d_output, *d_expected;
-    double *d_delta1, *d_delta2, *d_delta3;
+    // Allocate inputs, outputs, and deltas
+    double *d_input, *d_output1, *d_output2, *d_output;
+    double *d_delta1, *d_delta2, *d_delta3, *d_expected;
     double *d_loss;
     CHECK(cudaMalloc(&d_input, N_IN * sizeof(double)));
-    CHECK(cudaMalloc(&d_layer1, N1 * sizeof(double)));
-    CHECK(cudaMalloc(&d_out_layer1, N1 * sizeof(double)));
-    CHECK(cudaMalloc(&d_layer2, N2 * sizeof(double)));
-    CHECK(cudaMalloc(&d_out_layer2, N2 * sizeof(double)));
-    CHECK(cudaMalloc(&d_layer3, N_OUT * sizeof(double)));
+    CHECK(cudaMalloc(&d_output1, N1 * sizeof(double)));
+    CHECK(cudaMalloc(&d_output2, N2 * sizeof(double)));
     CHECK(cudaMalloc(&d_output, N_OUT * sizeof(double)));
     CHECK(cudaMalloc(&d_delta1, N1 * sizeof(double)));
     CHECK(cudaMalloc(&d_delta2, N2 * sizeof(double)));
@@ -339,6 +332,8 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
     CHECK(cudaMalloc(&d_expected, N_OUT * sizeof(double)));
     CHECK(cudaMalloc(&d_loss, sizeof(double)));
 
+    double Timer_Cop = 0;
+    GpuTimer timer_cop;
     GpuTimer timer; 
     timer.Start();
 
@@ -350,77 +345,80 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
         for (int sample = 0; sample < NTRAINING; sample++) {
             printf("Sample %d, ",sample + 1);
 
+            timer_cop.Start();
             // Read data
             readInput(imageFile, labelFile, h_input, h_expected);
             //Copy data to device
             CHECK(cudaMemcpy(d_input, h_input, N_IN * sizeof(double), cudaMemcpyHostToDevice));
             CHECK(cudaMemcpy(d_expected, h_expected, N_OUT * sizeof(double), cudaMemcpyHostToDevice));
+            timer_cop.Stop();
+            Timer_Cop += timer_cop.Elapsed();
 
             // Forward pass
-            forward_propagation<<<(N1 + 1023) / 1024, 1024>>>(d_input, d_w1, d_b1, d_layer1, N1, N_IN);
+            forward_propagation<<<(N1 + blockSize - 1) / blockSize, blockSize>>>(d_input, d_w1, d_b1, d_output1, N1, N_IN);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            ReLU<<<(N1 + 1023) / 1024, 1024>>>(d_layer1, d_out_layer1, N1);
+            ReLU<<<(N1 + blockSize - 1) / blockSize, blockSize>>>(d_output1, d_output1, N1);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            forward_propagation<<<(N2 + 1023) / 1024, 1024>>>(d_out_layer1, d_w2, d_b2, d_layer2, N2, N1);
+            forward_propagation<<<(N2 + blockSize - 1) / blockSize, blockSize>>>(d_output1, d_w2, d_b2, d_output2, N2, N1);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            ReLU<<<(N2 + 1023) / 1024, 1024>>>(d_layer2, d_out_layer2, N2);
+            ReLU<<<(N2 + blockSize - 1) / blockSize, blockSize>>>(d_output2, d_output2, N2);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            forward_propagation<<<(N_OUT + 1023) / 1024, 1024>>>(d_out_layer2, d_w3, d_b3, d_layer3, N_OUT, N2);
+            forward_propagation<<<(N_OUT + blockSize - 1) / blockSize, blockSize>>>(d_output2, d_w3, d_b3, d_output, N_OUT, N2);
+            CHECK(cudaGetLastError());
+		    CHECK(cudaDeviceSynchronize());
+ 
+            softmax<<<(N_OUT + blockSize - 1) / blockSize, blockSize, shared_memory_size>>>(d_output, d_output, N_OUT);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            
-            softmax<<<(N_OUT + 1023) / 1024, 1024, shared_memory_size>>>(d_layer3, d_output, N_OUT);
-            CHECK(cudaGetLastError());
-		    CHECK(cudaDeviceSynchronize());
 
             // Backward pass
-            compute_delta3<<<(N_OUT + 1023) / 1024, 1024>>>(d_output, d_expected, d_delta3, N_OUT);
+            compute_delta3<<<(N_OUT + blockSize - 1) / blockSize, blockSize>>>(d_output, d_expected, d_delta3, N_OUT);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            backward_propagation_W<<<(N2 + 1023) / 1024, 1024>>>(d_delta3, d_w3, d_out_layer2, N_OUT, N2);
+            backward_propagation_W<<<(N2 + blockSize - 1) / blockSize, blockSize>>>(d_delta3, d_w3, d_output2, N_OUT, N2);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            backward_propagation_B<<<(N_OUT + 1023) / 1024, 1024>>>(d_delta3, d_b3, N_OUT);
+            backward_propagation_B<<<(N_OUT + blockSize - 1) / blockSize, blockSize>>>(d_delta3, d_b3, N_OUT);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            compute_delta<<<(N2 + 1023) / 1024, 1024>>>(d_delta3, d_w3, d_delta2, d_layer2, N_OUT, N2);
+            compute_delta<<<(N2 + blockSize - 1) / blockSize, blockSize>>>(d_delta3, d_w3, d_delta2, d_output2, N_OUT, N2);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            backward_propagation_W<<<(N1 + 1023) / 1024, 1024>>>(d_delta2, d_w2, d_out_layer1, N2, N1);
+            backward_propagation_W<<<(N1 + blockSize - 1) / blockSize, blockSize>>>(d_delta2, d_w2, d_output1, N2, N1);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            backward_propagation_B<<<(N2 + 1023) / 1024, 1024>>>(d_delta2, d_b2, N2);
+            backward_propagation_B<<<(N2 + blockSize - 1) / blockSize, blockSize>>>(d_delta2, d_b2, N2);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            compute_delta<<<(N1 + 1023) / 1024, 1024>>>(d_delta2, d_w2, d_delta1, d_layer1, N2, N1);
+            compute_delta<<<(N1 + blockSize - 1) / blockSize, blockSize>>>(d_delta2, d_w2, d_delta1, d_output1, N2, N1);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            backward_propagation_W<<<(N_IN + 1023) / 1024, 1024>>>(d_delta1, d_w1, d_input, N1, N_IN);
+            backward_propagation_W<<<(N_IN + blockSize - 1) / blockSize, blockSize>>>(d_delta1, d_w1, d_input, N1, N_IN);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
-            backward_propagation_B<<<(N1 + 1023) / 1024, 1024>>>(d_delta1, d_b1, N1);
+            backward_propagation_B<<<(N1 + blockSize - 1) / blockSize, blockSize>>>(d_delta1, d_b1, N1);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
             CHECK(cudaMemset(d_loss, 0, sizeof(double)));
-            cross_entropy_kernel<<<(N_OUT + 1023) / 1024, 1024, shared_memory_size>>>(d_expected, d_output, d_loss, N_OUT);
+            cross_entropy_kernel<<<(N_OUT + blockSize - 1) / blockSize, blockSize, shared_memory_size>>>(d_expected, d_output, d_loss, N_OUT);
             CHECK(cudaGetLastError());
 		    CHECK(cudaDeviceSynchronize());
 
@@ -428,16 +426,15 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
             double h_loss;
             CHECK(cudaMemcpy(&h_loss, d_loss, sizeof(double), cudaMemcpyDeviceToHost)); 
             printf("Cross entropy: %0.6lf\n", h_loss); 
-            
         }
     rewind(labelFile);
     rewind(imageFile);
     }
 
     timer.Stop();
-    printf("Time: %.3f ms\n", timer.Elapsed());
+    printf("Time: %.3f ms\n", timer.Elapsed() - Timer_Cop);
 
-    // Copy weights and biases back to host after every epoch
+    // Copy weights and biases back to host 
     CHECK(cudaMemcpy(h_w1, d_w1, N1 * N_IN * sizeof(double), cudaMemcpyDeviceToHost));
     CHECK(cudaMemcpy(h_b1, d_b1, N1 * sizeof(double), cudaMemcpyDeviceToHost));
     CHECK(cudaMemcpy(h_w2, d_w2, N2 * N1 * sizeof(double), cudaMemcpyDeviceToHost));
@@ -445,16 +442,13 @@ void train (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3
     CHECK(cudaMemcpy(h_w3, d_w3, N_OUT * N2 * sizeof(double), cudaMemcpyDeviceToHost));
     CHECK(cudaMemcpy(h_b3, d_b3, N_OUT * sizeof(double), cudaMemcpyDeviceToHost));
 
-    // Lưu mô hình
+    // Save model
     write_model(h_w1, h_b1, h_w2, h_b2, h_w3, h_b3);
 
     // Free allocated memory on both device and host
     CHECK(cudaFree(d_input));
-    CHECK(cudaFree(d_layer1));
-    CHECK(cudaFree(d_out_layer1));
-    CHECK(cudaFree(d_layer2));
-    CHECK(cudaFree(d_out_layer2));
-    CHECK(cudaFree(d_layer3));
+    CHECK(cudaFree(d_output1));
+    CHECK(cudaFree(d_output2));
     CHECK(cudaFree(d_output));
     CHECK(cudaFree(d_delta1));
     CHECK(cudaFree(d_delta2));

@@ -16,7 +16,7 @@
 
 const char * testing_label_fn="mnist/t10k-labels-idx1-ubyte";
 const char * testing_image_fn="mnist/t10k-images-idx3-ubyte";
-const char *model_fn= "model.dat";
+const char *model_fn= "model_device.dat";
 
 #define CHECK(call)\
 {\
@@ -67,7 +67,7 @@ struct GpuTimer
 	}
 };
 
-// Hàm mở file
+// Open file
 FILE* openFile(const char *fileName, const char *mode) {
     FILE *file = fopen(fileName, mode);
     if (file == NULL) {
@@ -77,7 +77,7 @@ FILE* openFile(const char *fileName, const char *mode) {
     return file;
 }
 
-// Hàm đọc header của file
+// Read headers
 void readHeader(FILE *file, int headerSize) {
     char buffer;
     for (int i = 0; i < headerSize; i++) {
@@ -89,12 +89,12 @@ void readHeader(FILE *file, int headerSize) {
     }
 }
 
-// Hàm đọc dữ liệu từ file ảnh và file nhãn
+// Read image, label
 int readInput(FILE *imageFile , FILE *labelFile, 
                double *input, double *expected) {
     char buffer;
 
-    // Đọc dữ liệu ảnh
+    // Image
     for (int i = 0; i < HEIGHT; i++) {
         for (int j = 0; j < WIDTH; j++) {
             if (fread(&buffer, sizeof(char), 1, imageFile) != 1) {
@@ -107,7 +107,7 @@ int readInput(FILE *imageFile , FILE *labelFile,
         }
     }
 
-    // Đọc nhãn và chuyển đổi thành one-hot vector
+    // Label
     if (fread(&buffer, sizeof(char), 1, labelFile) != 1) {
         printf("Error reading label data\n");
         fclose(imageFile);
@@ -115,7 +115,6 @@ int readInput(FILE *imageFile , FILE *labelFile,
         exit(EXIT_FAILURE);
     }
 
-    // Khởi tạo giá trị cho vector `expected`
     for (int i = 0; i < N_OUT; i++) {
         expected[i] = 0.0;
     }
@@ -123,7 +122,7 @@ int readInput(FILE *imageFile , FILE *labelFile,
     return (int) buffer;
 }
 
-// CUDA kernel for softmax
+// Kernel for softmax
 __global__ void softmax(double *in_out, double *output, int n) {
     extern __shared__ double shared_mem[]; 
     
@@ -152,7 +151,7 @@ __global__ void softmax(double *in_out, double *output, int n) {
     }
 }
 
-// CUDA kernel for ReLU
+// Kernel for ReLU
 __global__ void ReLU(double *layer, double *out_layer, int n) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
@@ -160,7 +159,7 @@ __global__ void ReLU(double *layer, double *out_layer, int n) {
     }
 }
 
-// CUDA kernel for forward propagation
+// Kernel for forward propagation
 __global__ void forward_propagation(double *input, double *w, double *b, double *output, int rows, int cols) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < rows) {
@@ -207,8 +206,8 @@ void load_model(const char *file_name, double *w1, double *w2, double *w3, doubl
 void test (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3, double *h_b3,
              double *h_input, double *h_expected, FILE *imageFile, FILE *labelFile){
 
-
-    size_t shared_memory_size = 1024 * sizeof(double);
+    int blockSize = 256;
+    size_t shared_memory_size = 256 * sizeof(double);
 
     // Allocate device memory
     double *d_w1, *d_b1, *d_w2, *d_b2, *d_w3, *d_b3;
@@ -228,15 +227,12 @@ void test (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3,
     CHECK(cudaMemcpy(d_b3, h_b3, N_OUT * sizeof(double), cudaMemcpyHostToDevice));
 
     // Implement training loop (forward + backward propagation)
-    // Allocate inputs, outputs, and deltas here
-    double *d_input,*d_layer1, *d_out_layer1, *d_layer2, *d_out_layer2, *d_layer3, *d_output, *d_expected;
-    double *d_delta1, *d_delta2, *d_delta3;
+    // Allocate inputs, outputs, and deltas
+    double *d_input, *d_output1, *d_output2, *d_output;
+    double *d_delta1, *d_delta2, *d_delta3, *d_expected;
     CHECK(cudaMalloc(&d_input, N_IN * sizeof(double)));
-    CHECK(cudaMalloc(&d_layer1, N1 * sizeof(double)));
-    CHECK(cudaMalloc(&d_out_layer1, N1 * sizeof(double)));
-    CHECK(cudaMalloc(&d_layer2, N2 * sizeof(double)));
-    CHECK(cudaMalloc(&d_out_layer2, N2 * sizeof(double)));
-    CHECK(cudaMalloc(&d_layer3, N_OUT * sizeof(double)));
+    CHECK(cudaMalloc(&d_output1, N1 * sizeof(double)));
+    CHECK(cudaMalloc(&d_output2, N2 * sizeof(double)));
     CHECK(cudaMalloc(&d_output, N_OUT * sizeof(double)));
     CHECK(cudaMalloc(&d_delta1, N1 * sizeof(double)));
     CHECK(cudaMalloc(&d_delta2, N2 * sizeof(double)));
@@ -254,34 +250,34 @@ void test (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3,
         CHECK(cudaMemcpy(d_expected, h_expected, N_OUT * sizeof(double), cudaMemcpyHostToDevice));
 
         // Forward pass
-        forward_propagation<<<(N1 + 1023) / 1024, 1024>>>(d_input, d_w1, d_b1, d_layer1, N1, N_IN);
+        forward_propagation<<<(N1 + blockSize - 1) / blockSize, blockSize>>>(d_input, d_w1, d_b1, d_output1, N1, N_IN);
         CHECK(cudaGetLastError());
 		CHECK(cudaDeviceSynchronize());
 
-        ReLU<<<(N1 + 1023) / 1024, 1024>>>(d_layer1, d_out_layer1, N1);
+        ReLU<<<(N1 + blockSize - 1) / blockSize, blockSize>>>(d_output1, d_output1, N1);
         CHECK(cudaGetLastError());
 		CHECK(cudaDeviceSynchronize());
 
-        forward_propagation<<<(N2 + 1023) / 1024, 1024>>>(d_out_layer1, d_w2, d_b2, d_layer2, N2, N1);
+        forward_propagation<<<(N2 + blockSize - 1) / blockSize, blockSize>>>(d_output1, d_w2, d_b2, d_output2, N2, N1);
         CHECK(cudaGetLastError());
 		CHECK(cudaDeviceSynchronize());
 
-        ReLU<<<(N2 + 1023) / 1024, 1024>>>(d_layer2, d_out_layer2, N2);
+        ReLU<<<(N2 + blockSize - 1) / blockSize, blockSize>>>(d_output2, d_output2, N2);
         CHECK(cudaGetLastError());
 		CHECK(cudaDeviceSynchronize());
 
-        forward_propagation<<<(N_OUT + 1023) / 1024, 1024>>>(d_out_layer2, d_w3, d_b3, d_layer3, N_OUT, N2);
+        forward_propagation<<<(N_OUT + blockSize - 1) / blockSize, blockSize>>>(d_output2, d_w3, d_b3, d_output, N_OUT, N2);
         CHECK(cudaGetLastError());
 		CHECK(cudaDeviceSynchronize());
-
-        softmax<<<(N_OUT + 1023) / 1024, 1024, shared_memory_size>>>(d_layer3, d_output, N_OUT);
+ 
+        softmax<<<(N_OUT + blockSize - 1) / blockSize, blockSize, shared_memory_size>>>(d_output, d_output, N_OUT);
         CHECK(cudaGetLastError());
 		CHECK(cudaDeviceSynchronize());
 
         int predict=0;
         double h_out1;
         double h_out2;
-        for (int i = 1;i < N_OUT; i++){
+        for (int i = 1; i < N_OUT; i++){
             CHECK(cudaMemcpy(&h_out1, &d_output[i], sizeof(double), cudaMemcpyDeviceToHost));
             CHECK(cudaMemcpy(&h_out2, &d_output[predict], sizeof(double), cudaMemcpyDeviceToHost));
             if (h_out1 > h_out2){
@@ -301,11 +297,8 @@ void test (double *h_w1, double *h_b1, double *h_w2, double *h_b2, double *h_w3,
 
     // Free allocated memory on both device and host
     CHECK(cudaFree(d_input));
-    CHECK(cudaFree(d_layer1));
-    CHECK(cudaFree(d_out_layer1));
-    CHECK(cudaFree(d_layer2));
-    CHECK(cudaFree(d_out_layer2));
-    CHECK(cudaFree(d_layer3));
+    CHECK(cudaFree(d_output1));
+    CHECK(cudaFree(d_output2));
     CHECK(cudaFree(d_output));
     CHECK(cudaFree(d_delta1));
     CHECK(cudaFree(d_delta2));
